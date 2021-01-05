@@ -66,10 +66,16 @@ class NeuralNetwork:
     def predict(self):
         return self.__predict
 
+    def valid(self, x_test, y_test, debug=False):
+        self.__teach(x_test, y_test, epochs=1, learning_rate=0.0, debug=debug)
+
     def fit(self, x, y, epochs: int, learning_rate: float, debug=False):
+        self.__teach(x, y, epochs=epochs, learning_rate=learning_rate, debug=debug)
+    
+    def __teach(self, x, y, epochs: int, learning_rate: float, debug=False):
         self.__clear_statistics()
         units = self.__layers[0].units
-        assert x.shape[1] == units, 'Input shape is different as number_neurons 0 layer'
+        assert x.shape[1] == units, 'Input shape is different as number_neurons input layer'
         self.__x = x
         number_of_cycle = 0
         number_of_series = y.shape[0]

@@ -1,3 +1,4 @@
+import sys
 from typing import List, Dict
 
 import numpy as np
@@ -32,7 +33,6 @@ class NeuralNetwork:
         layer = self.__layers[key]
         layer.weights = weights
         layer.delta = 0.0
-        layer.weight_delta = np.zeros(weights.shape)
         self.__used_add_layer.add(key)
 
     def compile(self, loss: Loss, metrics: List[Metric]):
@@ -52,7 +52,6 @@ class NeuralNetwork:
                                                           high=current_layer.weight_max_value,
                                                           size=(rows, columns))
                 current_layer.delta = 0.0
-                current_layer.weight_delta = np.zeros(current_layer.weights)
 
     @property
     def x(self) -> np.ndarray:
@@ -71,7 +70,7 @@ class NeuralNetwork:
 
     def fit(self, x, y, epochs: int, learning_rate: float, debug=False):
         self.__teach(x, y, epochs=epochs, learning_rate=learning_rate, debug=debug)
-    
+
     def __teach(self, x, y, epochs: int, learning_rate: float, debug=False):
         self.__clear_statistics()
         units = self.__layers[0].units
@@ -80,6 +79,8 @@ class NeuralNetwork:
         number_of_cycle = 0
         number_of_series = y.shape[0]
         self.__predict = np.zeros(y.shape)
+        full_progress_bar = epochs * number_of_series
+        sum_series = 0
         while True:
             number_of_current_series = 0
             while True:
@@ -94,7 +95,10 @@ class NeuralNetwork:
                     print(message)
                 self.__predict[number_of_current_series] = part_y_pred
                 number_of_current_series += 1
+                sum_series += 1
                 self.__save_error_by_series(expected_value, part_y_pred)
+                current_progress = sum_series
+                self.__progress_bar(current=current_progress, total=full_progress_bar)
                 if number_of_current_series == number_of_series:
                     self.__save_metrics_history(y, self.__predict)
                     self.__save_error_by_epocs(y, self.__predict)
@@ -213,3 +217,11 @@ class NeuralNetwork:
 
     def __clear_statistics(self):
         self.__statistics.clear()
+
+    def __progress_bar(self, current, total, barLength=20):
+        percent = float(current) * 100 / total
+        arrow = '-' * int(percent / 100 * barLength - 1) + '>'
+        spaces = ' ' * (barLength - len(arrow))
+        if current % 10 == 0:
+            sys.stdout.write('\rTeaching progress: [%s%s] %d %%' % (arrow, spaces, percent))
+

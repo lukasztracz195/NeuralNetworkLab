@@ -54,16 +54,11 @@ test_set_y = test_set[:, 3:4]
 test_expected_value = prepare_expected_value(test_set_y, test_set)
 
 model = NeuralNetwork()
-#TODO ADD POSSIBLE AUTO SET SHAPE OF WEIGHTS
-model.add_layer(Layer(units=3, weight_min_value=None, weight_max_value=None, activation=None, type=TypeOfLayer.INPUT))  # 0
-model.add_layer(Layer(units=256, weight_min_value=None, weight_max_value=None, activation=ReLU(), type=TypeOfLayer.HIDDEN))  # 2
-model.add_layer(Layer(units=4, weight_min_value=None, weight_max_value=None, activation=SoftMax(), type=TypeOfLayer.OUTPUT))  # 4
 
-weight_1 = np.random.rand(256, 3)
-weight_2 = np.random.rand(4, 256)
+model.add_layer(Layer(units=3, type=TypeOfLayer.INPUT))  # 0
+model.add_layer(Layer(units=5, activation=ReLU(), type=TypeOfLayer.HIDDEN))  # 1
+model.add_layer(Layer(units=4, activation=SoftMax(), type=TypeOfLayer.OUTPUT))  # 2
 
-model.add_weights(1, weights=weight_1)
-model.add_weights(2, weights=weight_2)
 model.compile(loss=MeanSquaredError(), metrics=[CustomAccuracy()])
 
 model.fit(x=training_set_x, y=training_expected_value, epochs=10, learning_rate=0.000001, debug=False)
@@ -88,7 +83,7 @@ plt.plot(condensed_error, '-o')
 plt.xlabel('Number of epocs')
 plt.ylabel('Value of condenced error')
 plt.show()
-print("error:", statistics.condensed_error)
+print("error:", statistics.condensed_error[len(statistics.condensed_error)-1])
 
 model.fit(x=test_set_x, y=test_expected_value, epochs=1, learning_rate=0, debug=False)
 predict = model.predict
@@ -97,10 +92,10 @@ predict = model.predict
 def prepare_predict(predict):
     predict_color_array = np.zeros(predict.shape[0])
     index = 0
-    for rekord in predict:
-        max_from_rekord = max(rekord)
+    for record in predict:
+        max_from_record = max(record)
         for index_with_max in range(predict.shape[1]):
-            if predict[index, index_with_max] == max_from_rekord:
+            if predict[index, index_with_max] == max_from_record:
                 predict_color_array[index] = index_with_max
                 index += 1
                 break

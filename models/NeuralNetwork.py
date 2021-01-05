@@ -19,18 +19,21 @@ class NeuralNetwork:
         self.__list_metrics_functions: List[Metric] = list()
         self.__loss_function = None
         self.__statistics: NeuralStatistic = NeuralStatistic()
+        self.__used_add_layer = set()
 
     def add_layer(self, layer: Layer):
         index_for_layer = len(self.__layers)
         layer.index = index_for_layer
         self.__layers[index_for_layer] = layer
+        if index_for_layer > 0:
+            self.__keys_forward.append(index_for_layer)
 
     def add_weights(self, key: int, weights):
-        self.__keys_forward.append(key)
         layer = self.__layers[key]
         layer.weights = weights
         layer.delta = 0.0
         layer.weight_delta = np.zeros(weights.shape)
+        self.__used_add_layer.add(key)
 
     def compile(self, loss: Loss, metrics: List[Metric]):
         keys_for_backward = self.__keys_forward.copy()
@@ -38,6 +41,18 @@ class NeuralNetwork:
         self.__keys_backward = keys_for_backward
         self.__loss_function = loss
         self.__list_metrics_functions = metrics
+        for index_of_layer in self.__keys_forward:
+            index_layer_before = index_of_layer - 1
+            current_layer = self.__layers[index_of_layer]
+            before_layer = self.__layers[index_layer_before]
+            rows = current_layer.units
+            columns = before_layer.units
+            if index_of_layer not in self.__used_add_layer:
+                current_layer.weights = np.random.uniform(low=current_layer.weight_min_value,
+                                                          high=current_layer.weight_max_value,
+                                                          size=(rows, columns))
+                current_layer.delta = 0.0
+                current_layer.weight_delta = np.zeros(current_layer.weights)
 
     @property
     def x(self) -> np.ndarray:

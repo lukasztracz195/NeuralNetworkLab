@@ -5,7 +5,8 @@ from enums.TypeOfLayer import TypeOfLayer
 
 
 class Layer:
-    def __init__(self, units: int,weight_min_value, weight_max_value, activation: Activation, type: TypeOfLayer):
+    def __init__(self, units: int, weight_min_value=0.0, weight_max_value=1.0, activation=None,
+                 type=TypeOfLayer.UNDEFINED):
         self.__units = units
         self.__activation = activation
         self.__values = np.zeros(self.__units)
@@ -16,6 +17,7 @@ class Layer:
         self.__weight_min_value = weight_min_value
         self.__weight_max_value = weight_max_value
         self.__index = None
+        assert type != TypeOfLayer.UNDEFINED, 'Layer not have defined type'
 
     @property
     def units(self) -> int:

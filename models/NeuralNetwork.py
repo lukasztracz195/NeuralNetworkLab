@@ -3,31 +3,43 @@ from typing import List, Dict
 
 import numpy as np
 
+from enums.TypeOfData import TypeOfData
 from enums.TypeOfLayer import TypeOfLayer
 from loss.Loss import Loss
 from metrics.Metric import Metric
 from models.Layer import Layer
 from models.NeuralStatistics import NeuralStatistic
+import time
 
 
 class NeuralNetwork:
     def __init__(self):
         self.__layers = dict()
         self.__x = None
-        self.__predict = None
-        self.__keys_forward: List[int] = list()
-        self.__keys_backward: List[int] = list()
+        self.__predict = dict()
+        self.__test_predict = None
         self.__list_metrics_functions: List[Metric] = list()
         self.__loss_function = None
         self.__statistics: NeuralStatistic = NeuralStatistic()
         self.__used_add_layer = set()
+        self.__logs = list()
+        self.__output_layer = None
+        self.__input_layer = None
+        self.__previously_layer = None
 
     def add_layer(self, layer: Layer):
+
+        if self.__input_layer is None or layer.type == TypeOfLayer.INPUT:
+            self.__input_layer = layer
+        if self.__output_layer is None and layer.type == TypeOfLayer.OUTPUT:
+            self.__output_layer = layer
+        if self.__previously_layer is not None:
+            self.__previously_layer.next_layer = layer
+            layer.previously_layer = self.__previously_layer
+        self.__previously_layer = layer
         index_for_layer = len(self.__layers)
         layer.index = index_for_layer
         self.__layers[index_for_layer] = layer
-        if index_for_layer > 0:
-            self.__keys_forward.append(index_for_layer)
 
     def add_weights(self, key: int, weights):
         layer = self.__layers[key]
@@ -36,26 +48,28 @@ class NeuralNetwork:
         self.__used_add_layer.add(key)
 
     def compile(self, loss: Loss, metrics: List[Metric]):
-        keys_for_backward = self.__keys_forward.copy()
-        keys_for_backward.reverse()
-        self.__keys_backward = keys_for_backward
         self.__loss_function = loss
         self.__list_metrics_functions = metrics
-        for index_of_layer in self.__keys_forward:
-            index_layer_before = index_of_layer - 1
-            current_layer = self.__layers[index_of_layer]
-            before_layer = self.__layers[index_layer_before]
-            rows = current_layer.units
-            columns = before_layer.units
-            if index_of_layer not in self.__used_add_layer:
-                current_layer.weights = np.random.uniform(low=current_layer.weight_min_value,
-                                                          high=current_layer.weight_max_value,
-                                                          size=(rows, columns))
+        current_layer = self.__input_layer
+        while current_layer is not None:
+            if current_layer.previously_layer is not None:
+                previously_layer = current_layer.previously_layer
+                rows = current_layer.units
+                columns = previously_layer.units
+                if current_layer.index not in self.__used_add_layer:
+                    current_layer.weights = np.random.uniform(low=current_layer.weight_min_value,
+                                                              high=current_layer.weight_max_value,
+                                                              size=(rows, columns))
                 current_layer.delta = 0.0
+            current_layer = current_layer.next_layer
 
     @property
     def x(self) -> np.ndarray:
         return self.__x
+
+    @property
+    def test_predict(self) -> np.ndarray:
+        return self.__test_predict
 
     @property
     def statistics(self):
@@ -65,20 +79,26 @@ class NeuralNetwork:
     def predict(self):
         return self.__predict
 
-    def valid(self, x_test, y_test, debug=False):
-        self.__teach(x_test, y_test, epochs=1, learning_rate=0.0, debug=debug)
+    def valid(self, x_test, y_test, type_data=TypeOfData.TEST, debug=False):
+        self.__teach(x_test, y_test, epochs=1, learning_rate=0.0, type_data=type_data, debug=debug)
 
-    def fit(self, x, y, epochs: int, learning_rate: float, debug=False):
-        self.__teach(x, y, epochs=epochs, learning_rate=learning_rate, debug=debug)
+    def fit(self, x, y, epochs: int, learning_rate: float, type_data=TypeOfData.TRAINING, debug=False):
 
-    def __teach(self, x, y, epochs: int, learning_rate: float, debug=False):
+        start = time.time()
+        self.__teach(x, y, epochs=epochs, learning_rate=learning_rate, type_data=type_data, debug=debug)
+        end = time.time()
+        print("\nTime teaching: ", end - start, " s")
+        if debug:
+            self.__print_logs()
+
+    def __teach(self, x, y, epochs: int, learning_rate: float, type_data=TypeOfData.TRAINING, debug=False):
         self.__clear_statistics()
         units = self.__layers[0].units
         assert x.shape[1] == units, 'Input shape is different as number_neurons input layer'
         self.__x = x
         number_of_cycle = 0
         number_of_series = y.shape[0]
-        self.__predict = np.zeros(y.shape)
+        self.__predict[type_data] = np.zeros(y.shape)
         full_progress_bar = epochs * number_of_series
         sum_series = 0
         while True:
@@ -89,19 +109,18 @@ class NeuralNetwork:
                 self.__forward(input_value=input_value)
                 self.__backward(expected_value=expected_value, learning_rate=learning_rate, input_value=input_value)
                 part_y_pred = self.__extract_last_y_pred()
-                if debug:
-                    message = 'part pred_y after epocs %d, series %d : %s' % (
-                        number_of_cycle + 1, number_of_current_series + 1, part_y_pred)
-                    print(message)
-                self.__predict[number_of_current_series] = part_y_pred
+                message = 'part pred_y after epocs %d, series %d : %s' % (
+                    number_of_cycle + 1, number_of_current_series + 1, part_y_pred)
+                self.__logs.append(message)
+                self.__predict[type_data][number_of_current_series] = part_y_pred
                 number_of_current_series += 1
                 sum_series += 1
                 self.__save_error_by_series(expected_value, part_y_pred)
                 current_progress = sum_series
                 self.__progress_bar(current=current_progress, total=full_progress_bar)
                 if number_of_current_series == number_of_series:
-                    self.__save_metrics_history(y, self.__predict)
-                    self.__save_error_by_epocs(y, self.__predict)
+                    self.__save_metrics_history(y, self.__predict[type_data])
+                    self.__save_error_by_epocs(y, self.__predict[type_data])
                     self.__count_condensed_error()
                     break
             number_of_cycle += 1
@@ -109,82 +128,20 @@ class NeuralNetwork:
                 break
 
     def __forward(self, input_value):
-        served_input_layer = False
-        last_layer = None
-        for key in self.__keys_forward:
-            layer = self.__layers[key]
-            if served_input_layer:
-                values = last_layer.values
-                weights = layer.weights.T
-                layer.values = self.__multiply(values, weights)
-                if layer.type == TypeOfLayer.HIDDEN:
-                    layer.values = layer.activation.count_value(layer.values)
-                last_layer = layer
-            else:
-                weights = layer.weights.T
-                layer.values = self.__multiply(input_value, weights)
-                if layer.type == TypeOfLayer.HIDDEN:
-                    if layer.activation is not None:
-                        layer.values = layer.activation.count_value(layer.values)
-                last_layer = layer
-                served_input_layer = True
+        current_layer = self.__input_layer
+        while current_layer is not None:
+            current_layer.forward(input_value)
+            current_layer = current_layer.next_layer
 
     def __backward(self, expected_value: float, learning_rate: float, input_value):
-        self.__count_deltas(expected_value=expected_value)
-        self.__count_weight_deltas(input_value=input_value)
-        self.__change_weights(learning_rate=learning_rate)
-
-    def __count_deltas(self, expected_value):
-        served_output_layer = False
-        last_layer = None
-        for key in self.__keys_backward:
-            layer = self.__layers[key]
-            if served_output_layer:
-                delta = last_layer.delta
-                weights = last_layer.weights
-                layer.delta = self.__multiply(delta, weights)
-                if layer.activation is not None:
-                    derivative_values = layer.activation.count_value_of_derivative(layer.values)
-                else:
-                    derivative_values = 1.0
-                layer.delta = layer.delta * derivative_values
-                last_layer = layer
-            else:
-                values = layer.values
-                layer.delta = values - expected_value
-                served_output_layer = True
-                last_layer = layer
-
-    def __count_weight_deltas(self, input_value):
-        served_input_layer = False
-        last_layer = None
-        for key in self.__keys_forward:
-            layer = self.__layers[key]
-            if served_input_layer:
-                delta = layer.delta
-                values = last_layer.values
-                layer.weight_delta = np.outer(delta, values)
-                last_layer = layer
-            else:
-                delta = layer.delta
-                weight_delta = np.outer(delta, input_value)
-                layer.weight_delta = weight_delta
-                last_layer = layer
-                served_input_layer = True
-
-    def __change_weights(self, learning_rate: float):
-        for key in self.__keys_backward:
-            layer = self.__layers[key]
-            new_weight = layer.weights - learning_rate * layer.weight_delta
-            layer.weights = new_weight
-
-    def __multiply(self, a, b):
-        if type(a) == np.ndarray and type(b) == np.ndarray:
-            try:
-                return a.dot(b)
-            except:
-                return a.dot(b.T)
-        return a * b
+        current_layer = self.__output_layer
+        while current_layer is not None:
+            current_layer.backward(expected_value, input_value)
+            current_layer = current_layer.previously_layer
+        current_layer = self.__output_layer
+        while current_layer is not None:
+            current_layer.change_weights(learning_rate)
+            current_layer = current_layer.previously_layer
 
     def __extract_last_y_pred(self):
         last_index_of_layer = len(self.__layers) - 1
@@ -223,5 +180,9 @@ class NeuralNetwork:
         arrow = '-' * int(percent / 100 * barLength - 1) + '>'
         spaces = ' ' * (barLength - len(arrow))
         if current % 10 == 0:
-            sys.stdout.write('\rTeaching progress: [%s%s] %d %%' % (arrow, spaces, percent))
+            sys.stdout.write('\rTeaching progress: [%s%s] %f %%' % (arrow, spaces, percent))
 
+    def __print_logs(self):
+        print("\n")
+        for log in self.__logs:
+            print(log)

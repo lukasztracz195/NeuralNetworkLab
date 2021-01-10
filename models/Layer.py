@@ -13,10 +13,13 @@ class Layer:
         self.__delta = 0.0
         self.__weights = None
         self.__weight_delta = None
-        self.__type = type
+        self.__type: TypeOfLayer = type
         self.__weight_min_value = weight_min_value
         self.__weight_max_value = weight_max_value
         self.__index = None
+        self.__previously_layer = None
+        self.__next_layer = None
+        self.__logs = list()
         assert type != TypeOfLayer.UNDEFINED, 'Layer not have defined type'
 
     @property
@@ -78,3 +81,33 @@ class Layer:
     @property
     def type(self) -> TypeOfLayer:
         return self.__type
+
+    @property
+    def previously_layer(self):
+        return self.__previously_layer
+
+    @previously_layer.setter
+    def previously_layer(self, value):
+        self.__previously_layer = value
+
+    @property
+    def next_layer(self):
+        return self.__next_layer
+
+    @next_layer.setter
+    def next_layer(self, value):
+        self.__next_layer = value
+
+    def backward(self, expected_value: float, input_value):
+        pass
+
+    def change_weights(self, learning_rate: float):
+        pass
+
+    def multiply(self, a, b):
+        if type(a) == np.ndarray and type(b) == np.ndarray:
+            try:
+                return a.dot(b)
+            except:
+                return a.dot(b.T)
+        return a * b
